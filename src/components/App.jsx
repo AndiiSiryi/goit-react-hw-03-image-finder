@@ -6,11 +6,9 @@ import Loader from './Loader/Loader';
 import getImages from './PixabayApi/PixabayApi';
 
 import { Notify } from 'notiflix/build/notiflix-notify-aio';
-import css from './App.module.css'
-
+import css from './App.module.css';
 
 export class App extends Component {
-
   state = {
     searchQuery: null,
     images: [],
@@ -20,84 +18,77 @@ export class App extends Component {
     error: null,
   };
 
-  queryImage = async searchQuery => {
-    
-    if (this.state.searchQuery === searchQuery) {
-      Notify.warning('Search query is invalid');
+  componentDidUpdate(_, prevState) {
+  if (this.state.searchQuery !== prevState.searchQuery || this.state.page !== prevState.page) {
+    const { searchQuery, page } = this.state;
+
+    if (!searchQuery) {
+      Notify.failure('Search query is empty. Please enter a query.');
       return;
     }
-      
-    if (searchQuery === '') {
-    Notify.failure('Search query is empty. Please enter a query.');
+
+    this.setState({ isLoading: true, error: null });
+
+    getImages(searchQuery, page)
+      .then((response) => {
+        console.log(response);
+        const { data } = response;
+
+        if (data.totalHits === 0) {
+          Notify.failure('No results, please try another query.');
+          this.setState({ isLoading: false});
+        } else {
+          this.setState((prevState) => ({
+            images: page === 1 ? [...data.hits] : [...prevState.images, ...data.hits],
+            totalHits: data.totalHits,
+            isLoading: false,
+          }));
+        }
+      })
+      .catch((error) => {
+        this.setState({ error, isLoading: false });
+        Notify.failure('Error');
+      });
+  }
+}
+
+   handleSubmit = (searchQuery) => {
+    if (this.state.searchQuery === searchQuery) {
+      Notify.warning(`You are already viewing the request ${searchQuery}`);
     return;
   }
-    this.setState({ isLoading: true });
 
-    try {
-      const {
-        data: { hits, totalHits }
-      } = await getImages(searchQuery, 1);
-      if (!totalHits) Notify.failure('No results, please, try again');
-      this.setState(_ => ({
-        searchQuery,
-        images: [...hits],
-        page: 1,
-        totalHits: totalHits,
-        isLoading: false,
-      }));
-    } catch (error) {
-      this.setState({ error });
-      Notify.failure('Error');
+    if (searchQuery !== this.state.searchQuery) {
+      this.setState({ searchQuery, images: [], page: 1 });
     }
-
   };
 
-  onBtnClick = async () => {
-    try {
-      const { page, searchQuery } = this.state;
-      this.setState({ isLoading: true });
-
-      const {
-        data: { hits },
-      } = await getImages(searchQuery, page + 1);
-      if (hits.length === 0) Notify.failure('No results, please, try again');
-
-      this.setState(prevState => ({
-        images: [...prevState.images, ...hits],
-        page: prevState.page + 1,
-        isLoading: false,
-      }));
-    } catch (error) {
-      this.setState({ error});
-      Notify.failure('Error');
-    }
+  handleLoadMore = () => {
+    this.setState((prevState) => ({ page: prevState.page + 1 }));
   };
 
   render() {
     const { images, isLoading, error } = this.state;
     return (
       <div className={css.App}>
-        <Searchbar onSubmit={this.queryImage} />
+        <Searchbar onSubmit={this.handleSubmit} />
         {error && <h2>Error, please, try again</h2>}
-        {images.length > 0 ? (
-         <ImageGallery data={images}/>
-        ) : (
+        {images.length > 0 ? <ImageGallery data={images} /> : (
           <p
             style={{
               padding: 100,
               textAlign: 'center',
               fontSize: 30,
-                fontFamily: 'cursive',
-              color:'#9797a5',
+              fontFamily: 'cursive',
+              color: '#9797a5',
             }}
           >
             Image gallery is empty... 🖼️
           </p>
         )}
-        
-        {!isLoading && images.length !== 0 && (
-        <Button onBtnClick={this.onBtnClick} />)}
-        { isLoading && <Loader />}
+        {!isLoading && images.length !== 0 &&
+          <Button onBtnClick={this.handleLoadMore} />}
+        {isLoading && <Loader />}
       </div>
     );
   }
